@@ -1,4 +1,4 @@
-FROM golang:alpine
+FROM golang:buster
 
 # RUN useradd -s /bin/bash -m vscode \
 #  && groupadd docker \
