@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/canbefree/pkgs/utils/pb_demo"
 	pre_proto "github.com/golang/protobuf/proto"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc/codes"
@@ -27,12 +26,18 @@ type GrpcSession struct {
 	Err     error
 }
 
-func NewGrpcSession(req, resp proto.Message, err error) *GrpcSession {
+func NewGrpcSession(req, resp proto.Message, err error) (*GrpcSession, error) {
+	if req == nil {
+		return nil, fmt.Errorf("grpc: Request nil ")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("grpc: Response nil ")
+	}
 	return &GrpcSession{
 		Request: req,
 		Resp:    resp,
 		Err:     err,
-	}
+	}, nil
 }
 
 type midCache struct {
@@ -74,19 +79,30 @@ func (r *GrpcSession) Bytes() ([]byte, error) {
 	return s, nil
 }
 
-func (r *GrpcSession) Loads(data []byte, resp proto.Message) error {
+func (r *GrpcSession) Loads(data []byte) error {
 	m := &midCache{}
 	err := json.Unmarshal(data, &m)
 	if err != nil {
 		return err
 	}
 
-	if m.Resp != nil {
-		if err := proto.Unmarshal(m.Resp, resp); err != nil {
-			return err
-		}
+	typ := reflect.TypeOf(r.Resp)
+	val := reflect.ValueOf(r.Resp)
+
+	x1 := reflect.New(typ)
+	x2 := x1.Elem()
+	x2.Set(val)
+	x := x2.Interface()
+	res, ok := x.(proto.Message)
+	if !ok {
+		return fmt.Errorf("error creating")
 	}
-	r.Resp = resp
+
+	if err := proto.Unmarshal(m.Resp, res); err != nil {
+		return err
+	}
+
+	r.Resp = res
 	r.Err = status.Error(m.Err.Code, m.Err.MSG)
 	return nil
 }
@@ -157,18 +173,22 @@ func (g *GRPCCache) Get(ctx context.Context) (proto.Message, error) {
 					return nil, fmt.Errorf("resp not a proto.Message")
 				}
 			} else {
-				resp = nil
+				resp = g.session.Resp
 			}
 
 			if err != nil && len(g.E) > 0 {
 				for _, e := range g.E {
 					if !errors.Is(err, e) {
-						return NewGrpcSession(g.psession.Request, resp, err), nil
+						return NewGrpcSession(g.psession.Request, resp, err)
 					}
 				}
 			}
 
-			g.session = NewGrpcSession(g.psession.Request, resp, err)
+			g.session, err = NewGrpcSession(g.psession.Request, resp, err)
+			if err != nil {
+				return nil, err
+			}
+
 			bytes, err := g.session.Bytes()
 			if err != nil {
 				return nil, err
@@ -179,8 +199,8 @@ func (g *GRPCCache) Get(ctx context.Context) (proto.Message, error) {
 			}
 			return g.session, nil
 		}
-		var resp *pb_demo.Demo = &pb_demo.Demo{}
-		if err := g.session.Loads(bytes, resp); err != nil {
+
+		if err := g.session.Loads(bytes); err != nil {
 			panic(err)
 		}
 		return g.session, nil

@@ -13,6 +13,7 @@ func PanicIfErr(err error) {
 	}
 }
 
+// GO usage go Go(...)(ctx)
 func GO(l common.LoggerIFace, fn func(ctx context.Context) error) func(context.Context) {
 	return func(ctx context.Context) {
 		defer func() {

@@ -42,12 +42,13 @@ func Test_GRPCCache_Get(t *testing.T) {
 		},
 	})
 	cacheEngine.On("GetBytesFromCache", ctx, mock.Anything).Return(msg, nil).Times(1)
-	// cacheEngine.On("SetBytesInfoCache", ctx, mock.Anything, mock.Anything, 10).Return(nil).Times(1)
+
 	req := &pb_demo.CreateDemoRequest{}
 	g := &singleflight.Group{}
+	var session, _ = NewGrpcSession(&pb_demo.GetDemoRequest{}, &pb_demo.Demo{}, nil)
 	grpcCache := NewGrpcCache(cacheEngine, func() (interface{}, error) {
 		return getDemo(ctx, req)
-	}, NewGrpcSession(req, nil, nil), g, 10)
+	}, session, g, 10)
 	iresp, err := grpcCache.Get(ctx)
 	resp, ok := iresp.(*pb_demo.Demo)
 	assert.Equal(t, true, ok)
@@ -64,11 +65,12 @@ func Test_GRPCCache_Get_Miss(t *testing.T) {
 	cacheEngine.On("SetBytesInfoCache", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(1)
 	req := &pb_demo.CreateDemoRequest{}
 	g := &singleflight.Group{}
+	var session, _ = NewGrpcSession(req, &pb_demo.Demo{}, nil)
 	grpcCache := NewGrpcCache(cacheEngine, func() (interface{}, error) {
 		return getDemo(ctx, req)
-	}, NewGrpcSession(req, nil, nil), g, 10)
+	}, session, g, 10)
 	iresp, err := grpcCache.Get(ctx)
-	assert.Equal(t, nil, iresp)
+	assert.Same(t, &pb_demo.Demo{}, iresp)
 	assert.Equal(t, err, fmt.Errorf("request err"))
 }
 
@@ -79,9 +81,10 @@ func Test_GRPCCache_Get_E(t *testing.T) {
 	// cacheEngine.On("SetBytesInfoCache", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(0)
 	req := &pb_demo.CreateDemoRequest{}
 	g := &singleflight.Group{}
+	var session, _ = NewGrpcSession(req, &pb_demo.Demo{}, nil)
 	grpcCache := NewGrpcCache(cacheEngine, func() (interface{}, error) {
 		return getDemo(ctx, req)
-	}, NewGrpcSession(req, nil, nil), g, 10)
+	}, session, g, 10)
 
 	grpcCache.AddE(errors.New("request err"))
 
